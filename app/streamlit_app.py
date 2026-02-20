@@ -2,10 +2,19 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+import sys
 
 import joblib
 import pandas as pd
 import streamlit as st
+
+# Ensure `paddy` package can be imported when running from app/ in src layout.
+ROOT = Path(__file__).resolve().parents[1]
+SRC = ROOT / "src"
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+if str(SRC) not in sys.path:
+    sys.path.insert(0, str(SRC))
 
 from paddy.config import KEY_APP_FEATURES, PROJECT_ROOT
 from paddy.data import load_data

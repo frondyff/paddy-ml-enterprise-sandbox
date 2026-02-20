@@ -8,12 +8,13 @@ import numpy as np
 import pandas as pd
 from sklearn.metrics import accuracy_score, f1_score
 from sklearn.model_selection import train_test_split
+from sklearn.pipeline import Pipeline
 from sklearn.semi_supervised import SelfTrainingClassifier
 
 from paddy.config import RANDOM_SEED, TARGET_COLUMN, TEST_SIZE
 from paddy.data import load_data, split_features_target
 from paddy.explain import save_json
-from paddy.features import build_classification_pipeline
+from paddy.features import build_preprocessor
 from paddy.models import get_semi_supervised_base_classifier
 
 
@@ -61,20 +62,23 @@ def run_semisupervised(
     y_train_partial = y_train_cls.copy().to_numpy()
     y_train_partial[mask_unlabeled] = -1
 
+    preprocessor, _, _ = build_preprocessor(X_train)
+    X_train_transformed = preprocessor.fit_transform(X_train)
+    X_test_transformed = preprocessor.transform(X_test)
+
     labeled_idx = ~mask_unlabeled
-    X_labeled = X_train.loc[labeled_idx]
-    y_labeled = y_train_cls.loc[labeled_idx]
+    X_labeled = X_train_transformed[labeled_idx]
+    y_labeled = y_train_cls.to_numpy()[labeled_idx]
 
     base_clf = get_semi_supervised_base_classifier(random_state=RANDOM_SEED)
-    supervised_pipe = build_classification_pipeline(X_train, base_clf, feature_selection=True)
-    supervised_pipe.fit(X_labeled, y_labeled)
-    sup_preds = supervised_pipe.predict(X_test)
+    supervised_model = Pipeline(steps=[("model", base_clf)])
+    supervised_model.fit(X_labeled, y_labeled)
+    sup_preds = supervised_model.predict(X_test_transformed)
 
     semi_base = get_semi_supervised_base_classifier(random_state=RANDOM_SEED)
-    semi_pipe = build_classification_pipeline(X_train, semi_base, feature_selection=True)
-    semi_model = SelfTrainingClassifier(estimator=semi_pipe, threshold=0.75, max_iter=10)
-    semi_model.fit(X_train, y_train_partial)
-    semi_preds = semi_model.predict(X_test)
+    semi_model = SelfTrainingClassifier(estimator=semi_base, threshold=0.75, max_iter=10)
+    semi_model.fit(X_train_transformed, y_train_partial)
+    semi_preds = semi_model.predict(X_test_transformed)
 
     payload = {
         "target": target_column,
